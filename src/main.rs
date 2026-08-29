@@ -1,4 +1,3 @@
-mod web_api_plane;
 use std::{env, sync::Arc};
 
 use axum::{
@@ -17,6 +16,8 @@ use serde::Deserialize;
 use tokio::sync::{RwLock, broadcast};
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
+
+mod web_api_plane;
 
 #[derive(Clone)]
 struct AppState {
@@ -59,7 +60,10 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/", get(index))
         .route("/healthz", get(health))
-            .route("/v1/data-plane/capabilities", axum::routing::get(|| async { axum::Json(crate::web_api_plane::capabilities()) }))
+        .route(
+            "/v1/data-plane/capabilities",
+            get(|| async { axum::Json(crate::web_api_plane::capabilities()) }),
+        )
         .route(
             "/partials/reservations",
             get(items_partial).post(create_item),
