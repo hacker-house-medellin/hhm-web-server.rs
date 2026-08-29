@@ -17,6 +17,7 @@ use tokio::sync::{RwLock, broadcast};
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
+mod four_transports;
 mod web_api_plane;
 
 #[derive(Clone)]
