@@ -1,16 +1,20 @@
+mod web_api_plane;
 use std::{env, sync::Arc};
 
 use axum::{
-    extract::{Form, State, ws::{Message, WebSocket, WebSocketUpgrade}},
+    Router,
+    extract::{
+        Form, State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
+    },
     response::{Html, IntoResponse},
     routing::get,
-    Router,
 };
 use futures_util::{SinkExt, StreamExt};
 use maud::{DOCTYPE, Markup, html};
 use sea_orm::{Database, DatabaseConnection};
 use serde::Deserialize;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{RwLock, broadcast};
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
@@ -23,22 +27,43 @@ struct AppState {
 }
 
 #[derive(Clone)]
-struct Item { id: Uuid, title: String, detail: String }
+struct Item {
+    id: Uuid,
+    title: String,
+    detail: String,
+}
 
 #[derive(Deserialize)]
-struct NewItem { title: String, detail: String }
+struct NewItem {
+    title: String,
+    detail: String,
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
-    tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
-    let db = match env::var("DATABASE_URL") { Ok(url) if !url.is_empty() => Some(Database::connect(url).await?), _ => None };
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+    let db = match env::var("DATABASE_URL") {
+        Ok(url) if !url.is_empty() => Some(Database::connect(url).await?),
+        _ => None,
+    };
     let (events, _) = broadcast::channel(256);
-    let state = AppState { db, items: Arc::new(RwLock::new(seed_items())), events, supabase_url: env::var("SUPABASE_URL").ok() };
+    let state = AppState {
+        db,
+        items: Arc::new(RwLock::new(seed_items())),
+        events,
+        supabase_url: env::var("SUPABASE_URL").ok(),
+    };
     let app = Router::new()
         .route("/", get(index))
         .route("/healthz", get(health))
-        .route("/partials/reservations", get(items_partial).post(create_item))
+            .route("/v1/data-plane/capabilities", axum::routing::get(|| async { axum::Json(crate::web_api_plane::capabilities()) }))
+        .route(
+            "/partials/reservations",
+            get(items_partial).post(create_item),
+        )
         .route("/ws", get(ws_upgrade))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -55,7 +80,9 @@ async fn index(State(state): State<AppState>) -> Html<String> {
 }
 
 async fn health(State(state): State<AppState>) -> impl IntoResponse {
-    axum::Json(serde_json::json!({"status":"ok","database":state.db.is_some(),"supabase":state.supabase_url.is_some()}))
+    axum::Json(
+        serde_json::json!({"status":"ok","database":state.db.is_some(),"supabase":state.supabase_url.is_some()}),
+    )
 }
 
 async fn items_partial(State(state): State<AppState>) -> Html<String> {
@@ -63,7 +90,11 @@ async fn items_partial(State(state): State<AppState>) -> Html<String> {
 }
 
 async fn create_item(State(state): State<AppState>, Form(input): Form<NewItem>) -> Html<String> {
-    let item = Item { id: Uuid::new_v4(), title: input.title, detail: input.detail };
+    let item = Item {
+        id: Uuid::new_v4(),
+        title: input.title,
+        detail: input.detail,
+    };
     state.items.write().await.push(item.clone());
     let _ = state.events.send(format!("created:{}", item.id));
     Html(items_markup(&state.items.read().await).into_string())
@@ -98,9 +129,17 @@ fn items_markup(items: &[Item]) -> Markup {
     html! { @for item in items { article class="card" data-id=(item.id) { h2 { (item.title) } p { (item.detail) } } } }
 }
 
-fn seed_items() -> Vec<Item> { vec![Item { id: Uuid::new_v4(), title: "Foundation ready".into(), detail: "Maud + Axum + SeaORM + Supabase configuration + HTMX + WebSockets".into() }] }
+fn seed_items() -> Vec<Item> {
+    vec![Item {
+        id: Uuid::new_v4(),
+        title: "Foundation ready".into(),
+        detail: "Maud + Axum + SeaORM + Supabase configuration + HTMX + WebSockets".into(),
+    }]
+}
 
-async fn ws_upgrade(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse { ws.on_upgrade(move |socket| websocket(socket, state)) }
+async fn ws_upgrade(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| websocket(socket, state))
+}
 async fn websocket(socket: WebSocket, state: AppState) {
     let (mut tx, mut rx) = socket.split();
     let mut events = state.events.subscribe();
