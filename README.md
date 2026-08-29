@@ -1,4 +1,4 @@
-# hhm-mash-web
+# hhm-web-server.rs
 
 **Hacker House Medellín — MASH web server: Maud + Axum + SeaORM + Supabase + HTMX + WebSockets**
 
@@ -8,7 +8,7 @@ This repository was bootstrapped on 2026-08-04. It is designed as an independent
 
 ## GitHub target
 
-`hacker-house-medellin/hhm-mash-web`
+`hacker-house-medellin/hhm-web-server.rs`
 
 ## Baseline
 
