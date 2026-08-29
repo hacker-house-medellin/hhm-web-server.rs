@@ -1,4 +1,6 @@
-use std::{env, sync::Arc};
+mod flags;
+
+use std::sync::Arc;
 
 use axum::{
     Router,
@@ -40,11 +42,16 @@ struct NewItem {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenvy::dotenv().ok();
+    if let Some(output) = flags::process_control().map_err(anyhow::Error::msg)? {
+        print!("{output}");
+        return Ok(());
+    }
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(tracing_subscriber::EnvFilter::try_new(
+            flags::var("RUST_LOG").unwrap_or_else(|_| "error".to_owned()),
+        )?)
         .init();
-    let db = match env::var("DATABASE_URL") {
+    let db = match flags::var("DATABASE_URL") {
         Ok(url) if !url.is_empty() => Some(Database::connect(url).await?),
         _ => None,
     };
@@ -53,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
         db,
         items: Arc::new(RwLock::new(seed_items())),
         events,
-        supabase_url: env::var("SUPABASE_URL").ok(),
+        supabase_url: flags::var("SUPABASE_URL").ok(),
     };
     let app = Router::new()
         .route("/", get(index))
@@ -65,8 +72,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/ws", get(ws_upgrade))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
-    let host = env::var("HOST").unwrap_or_else(|_| "0.0.0.0".into());
-    let port = env::var("PORT").unwrap_or_else(|_| "8081".into());
+    let host = flags::var("HOST").unwrap_or_else(|_| "0.0.0.0".into());
+    let port = flags::var("PORT").unwrap_or_else(|_| "8081".into());
     let listener = tokio::net::TcpListener::bind(format!("{host}:{port}")).await?;
     axum::serve(listener, app).await?;
     Ok(())
