@@ -11,7 +11,7 @@ axum = { version = "0.8", features = ["macros", "multipart"] }
 chrono = { version = "0.4", features = ["serde"] }
 dotenvy = "0.15"
 hhm-interfaces = { git = "https://github.com/hacker-house-medellin/hhm-interfaces", rev = "975d06ad5724f1211efb7f7366544ea317d751c1" }
-hhm-orm-core = { git = "https://github.com/hacker-house-medellin/hhm-orm-core", rev = "15b869afe3a3276b62f4f36951878b74aa47ce8e" }
+hhm-orm-core = { git = "https://github.com/hacker-house-medellin/hhm-orm-core", rev = "fd3d026aeee79e9b10a3fd50006e48987f72c59f" }
 maud = { version = "0.27", features = ["axum"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 secrecy = "0.10"
