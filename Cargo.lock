@@ -912,7 +912,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 [[package]]
 name = "hhm-intake-schema"
 version = "0.1.0"
-source = "git+https://github.com/hacker-house-medellin/hhm-lib-core?rev=ededfc2d9844fa1f47a6b6e378a6d3a5507ba103#ededfc2d9844fa1f47a6b6e378a6d3a5507ba103"
+source = "git+https://github.com/hacker-house-medellin/hhm-lib-core?rev=bf9b319b71595e76c2519b0cbce4aa1a4953217a#bf9b319b71595e76c2519b0cbce4aa1a4953217a"
 dependencies = [
  "sea-orm",
  "serde",
@@ -921,7 +921,7 @@ dependencies = [
 [[package]]
 name = "hhm-interfaces"
 version = "0.1.0"
-source = "git+https://github.com/hacker-house-medellin/hhm-interfaces?rev=34ba3c117bc12371d613dd4b05fa018e6629cac6#34ba3c117bc12371d613dd4b05fa018e6629cac6"
+source = "git+https://github.com/hacker-house-medellin/hhm-interfaces?rev=415e94c79fe276cc9d737fc2c458190ff6fea97f#415e94c79fe276cc9d737fc2c458190ff6fea97f"
 dependencies = [
  "chrono",
  "serde",
@@ -961,7 +961,7 @@ dependencies = [
 [[package]]
 name = "hhm-orm-core"
 version = "0.1.0"
-source = "git+https://github.com/hacker-house-medellin/hhm-orm-core?rev=3917cbe5696be8d70995501f9434adc1cadbf857#3917cbe5696be8d70995501f9434adc1cadbf857"
+source = "git+https://github.com/hacker-house-medellin/hhm-orm-core?rev=dd862f6df811fe6ca8c8452f9937eec3f10a24b0#dd862f6df811fe6ca8c8452f9937eec3f10a24b0"
 dependencies = [
  "chrono",
  "hhm-intake-schema",
