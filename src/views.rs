@@ -107,6 +107,7 @@ pub fn application(prefill: &IntakePrefill, nonce: Uuid) -> Markup {
                 (field("Accessibility or accommodation notes", "Optional. Share only what you want our review team to consider.", html! {
                     textarea name="accessibility_or_accommodation_notes" maxlength="4000" rows="4" {}
                 }))
+                (room_placement_fields())
                 section class="upload-grid" aria-labelledby="documents-heading" {
                     h2 id="documents-heading" { "Private documents" }
                     (field("Resume", "PDF or DOCX, up to 10 MB.", html! {
@@ -126,6 +127,68 @@ pub fn application(prefill: &IntakePrefill, nonce: Uuid) -> Markup {
             }
         },
     )
+}
+
+fn room_placement_fields() -> Markup {
+    html! {
+        section class="panel form-stack" aria-labelledby="room-placement-heading" {
+            h2 id="room-placement-heading" { "Room placement and living preferences" }
+            p class="fine-print" { "These answers are used only for accommodation and room placement—not admission scoring. You may choose ‘Prefer not to say’ for sensory questions." }
+            (field("Potential allergies", "Optional. Share food, material, pet, or environmental allergies that may affect a shared living space.", html! {
+                textarea name="allergy_notes" maxlength="2000" rows="4" {}
+            }))
+            div class="two-col" {
+                (field("Noise sensitivity", "Choose the closest fit.", html! {
+                    select name="noise_sensitivity" required {
+                        option value="none" { "None" }
+                        option value="low" { "Low" }
+                        option value="moderate" { "Moderate" }
+                        option value="high" { "High" }
+                        option value="prefer_not_to_say" { "Prefer not to say" }
+                    }
+                }))
+                (field("Light sensitivity", "Choose the closest fit.", html! {
+                    select name="light_sensitivity" required {
+                        option value="none" { "None" }
+                        option value="low" { "Low" }
+                        option value="moderate" { "Moderate" }
+                        option value="high" { "High" }
+                        option value="prefer_not_to_say" { "Prefer not to say" }
+                    }
+                }))
+                (field("Room-sharing preference", "Some HHaus rooms have two or three beds.", html! {
+                    select name="roommate_preference" required {
+                        option value="private_room" { "Private room" }
+                        option value="open_to_roommates" { "Open to roommates" }
+                        option value="prefer_roommates" { "Prefer roommates" }
+                        option value="flexible" { "Flexible / no strong preference" }
+                    }
+                }))
+                (field("Preferred room occupancy", "Total residents in the room, including you.", html! {
+                    select name="preferred_room_occupancy" required {
+                        option value="1" { "1 person / private room" }
+                        option value="2" { "2 people / one roommate" }
+                        option value="3" { "3 people / two roommates" }
+                    }
+                }))
+            }
+            (field("Other room preferences", "Optional. Tell us about room location, natural light, stairs, layout, schedule, or other placement considerations.", html! {
+                textarea name="room_preference_notes" maxlength="2000" rows="4" {}
+            }))
+            label class="consent" {
+                input type="checkbox" name="roommate_for_lower_cost";
+                span { "I am interested in roommates for a lower-cost stay." }
+            }
+            label class="consent" {
+                input type="checkbox" name="roommate_for_social_connection";
+                span { "I am interested in roommates for more social connection." }
+            }
+            label class="consent" {
+                input type="checkbox" name="accommodation_data_consent" required;
+                span { "I consent to HHaus using these allergy, sensory, accommodation, and room-preference answers only for accommodation and placement planning." }
+            }
+        }
+    }
 }
 
 #[must_use]
@@ -298,6 +361,14 @@ mod tests {
             "name=\"resume\"",
             "name=\"photo_id\"",
             "name=\"age_and_identity_attestation\"",
+            "name=\"allergy_notes\"",
+            "name=\"noise_sensitivity\"",
+            "name=\"light_sensitivity\"",
+            "name=\"roommate_preference\"",
+            "name=\"preferred_room_occupancy\"",
+            "name=\"roommate_for_lower_cost\"",
+            "name=\"roommate_for_social_connection\"",
+            "name=\"accommodation_data_consent\"",
             "name=\"privacy_accepted\"",
             "builder@example.com",
         ] {

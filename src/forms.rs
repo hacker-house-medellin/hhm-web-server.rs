@@ -4,7 +4,7 @@ use axum::extract::Multipart;
 use chrono::NaiveDate;
 use hhm_interfaces::intake::{
     ApplicationCreate, MAX_UPLOAD_BYTES, PRIVACY_NOTICE_VERSION, PreInterestCreate, ProjectStage,
-    ReferralCreate, StayPreference, UploadKind,
+    ReferralCreate, RoommatePreference, SensitivityLevel, StayPreference, UploadKind,
 };
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -118,6 +118,7 @@ pub async fn parse_application(mut multipart: Multipart) -> Result<ParsedApplica
         NaiveDate::parse_from_str(&format!("{}-01", preferred_month.trim()), "%Y-%m-%d")
             .map_err(|_| FormError)?;
     let attestation = take(&mut values, "age_and_identity_attestation")?;
+    let accommodation_consent = take(&mut values, "accommodation_data_consent")?;
     let input = ApplicationCreate {
         email: trimmed(&take(&mut values, "email")?),
         linkedin_url: trimmed(&take(&mut values, "linkedin_url")?),
@@ -141,6 +142,20 @@ pub async fn parse_application(mut multipart: Multipart) -> Result<ParsedApplica
             &mut values,
             "accessibility_or_accommodation_notes",
         )?),
+        allergy_notes: optional(&take(&mut values, "allergy_notes")?),
+        noise_sensitivity: parse_sensitivity(&take(&mut values, "noise_sensitivity")?)?,
+        light_sensitivity: parse_sensitivity(&take(&mut values, "light_sensitivity")?)?,
+        room_preference_notes: optional(&take(&mut values, "room_preference_notes")?),
+        roommate_preference: parse_roommate_preference(&take(&mut values, "roommate_preference")?)?,
+        preferred_room_occupancy: parse_room_occupancy(&take(
+            &mut values,
+            "preferred_room_occupancy",
+        )?)?,
+        roommate_for_lower_cost: checked(values.remove("roommate_for_lower_cost").as_deref()),
+        roommate_for_social_connection: checked(
+            values.remove("roommate_for_social_connection").as_deref(),
+        ),
+        accommodation_data_consent: checked(Some(&accommodation_consent)),
         resume_upload_id: Uuid::nil(),
         photo_id_upload_id: Uuid::nil(),
         age_and_identity_attestation: checked(Some(&attestation)),
@@ -153,6 +168,9 @@ pub async fn parse_application(mut multipart: Multipart) -> Result<ParsedApplica
     // Upload IDs are assigned only after server-side private upload verification,
     // so validate the remaining fields here and the complete contract later.
     if !input.age_and_identity_attestation {
+        return Err(FormError);
+    }
+    if !input.accommodation_data_consent {
         return Err(FormError);
     }
     let mut validation_probe = input.clone();
@@ -217,6 +235,15 @@ async fn collect_application_parts(
             | "preferred_start_month"
             | "community_contribution"
             | "accessibility_or_accommodation_notes"
+            | "allergy_notes"
+            | "noise_sensitivity"
+            | "light_sensitivity"
+            | "room_preference_notes"
+            | "roommate_preference"
+            | "preferred_room_occupancy"
+            | "roommate_for_lower_cost"
+            | "roommate_for_social_connection"
+            | "accommodation_data_consent"
             | "age_and_identity_attestation"
             | "privacy_accepted"
             | "submission_nonce" => {
@@ -311,6 +338,36 @@ fn parse_stage(value: &str) -> Result<ProjectStage, FormError> {
     }
 }
 
+fn parse_sensitivity(value: &str) -> Result<SensitivityLevel, FormError> {
+    match value.trim() {
+        "none" => Ok(SensitivityLevel::None),
+        "low" => Ok(SensitivityLevel::Low),
+        "moderate" => Ok(SensitivityLevel::Moderate),
+        "high" => Ok(SensitivityLevel::High),
+        "prefer_not_to_say" => Ok(SensitivityLevel::PreferNotToSay),
+        _ => Err(FormError),
+    }
+}
+
+fn parse_roommate_preference(value: &str) -> Result<RoommatePreference, FormError> {
+    match value.trim() {
+        "private_room" => Ok(RoommatePreference::PrivateRoom),
+        "open_to_roommates" => Ok(RoommatePreference::OpenToRoommates),
+        "prefer_roommates" => Ok(RoommatePreference::PreferRoommates),
+        "flexible" => Ok(RoommatePreference::Flexible),
+        _ => Err(FormError),
+    }
+}
+
+fn parse_room_occupancy(value: &str) -> Result<i32, FormError> {
+    match value.trim() {
+        "1" => Ok(1),
+        "2" => Ok(2),
+        "3" => Ok(3),
+        _ => Err(FormError),
+    }
+}
+
 fn checked(value: Option<&str>) -> bool {
     matches!(value, Some("on" | "yes" | "true" | "1"))
 }
@@ -354,6 +411,22 @@ mod tests {
     fn nonce_is_canonical_and_nonzero() {
         assert!(parse_nonce("00000000-0000-0000-0000-000000000000").is_err());
         assert!(parse_nonce(&Uuid::new_v4().to_string()).is_ok());
+    }
+
+    #[test]
+    fn placement_choices_are_closed_and_allow_three_person_rooms() {
+        assert_eq!(parse_room_occupancy("3"), Ok(3));
+        assert!(parse_room_occupancy("4").is_err());
+        assert_eq!(
+            parse_sensitivity("prefer_not_to_say"),
+            Ok(SensitivityLevel::PreferNotToSay)
+        );
+        assert!(parse_sensitivity("extreme").is_err());
+        assert_eq!(
+            parse_roommate_preference("prefer_roommates"),
+            Ok(RoommatePreference::PreferRoommates)
+        );
+        assert!(parse_roommate_preference("anyone").is_err());
     }
 
     #[test]
