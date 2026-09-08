@@ -1,6 +1,6 @@
 # hhm-web-server.rs
 
-**Hacker House Medellín — MASH web server: Maud + Axum + SeaORM + Supabase + HTMX + WebSockets**
+**Hacker House Medellín — public and authenticated web server: Maud + Axum + Shared Auth + Turnstile + WebSockets**
 
 Operations and community software for an entrepreneur-focused coliving and coworking house in Medellín, Colombia.
 
@@ -10,27 +10,49 @@ This repository was bootstrapped on 2026-08-04. It is designed as an independent
 
 `hacker-house-medellin/hhm-web-server.rs`
 
-## Baseline
+## Public account entry
 
-- Rust 2024 edition for backend and native components.
-- Axum HTTP/WebSocket transport.
-- Supabase/PostgreSQL configuration through `DATABASE_URL`, `SUPABASE_URL`, and environment-only secrets.
-- OpenTelemetry-compatible tracing hooks.
-- Docker, Nix, and GitHub Actions entry points.
-- Contracts live in `hhm-interfaces`; shared behavior lives in `hhm-libs`.
+The server now owns polished, responsive entry surfaces for two separate journeys:
+
+- `/join/individual` for a person planning a one-time or continuing HHaus stay;
+- `/join/organization` for an accountable person starting a team or organization program.
+
+Both use the same safe boundary. The entry POST requires an exact `Origin`, a
+short-lived `Secure; HttpOnly; SameSite=Lax` CSRF cookie, and a Cloudflare
+Turnstile result bound to the configured HHaus hostname and action. It then
+redirects only to the allow-listed same-origin Shared Auth browser prefix.
+
+HHaus never accepts a password on these pages. Browser JavaScript never receives
+a provider token, Shared Auth token, or delegated HHM API bearer. The web server
+resolves the host-only Shared Auth session over a private back channel and asks
+for one fixed audience/scope delegation before showing an onboarding shell or
+opening realtime transport.
+
+Provider provenance such as `provider_tenant` is checked against runtime
+configuration but is never treated as an HHaus organization. Organization,
+membership, and product-role authority must be derived from HHM-owned server
+records; no browser form in this slice accepts those claims.
+
+See [`docs/auth-browser-boundary.md`](docs/auth-browser-boundary.md).
 
 ## Development
 
 ```bash
 cp .env.example .env 2>/dev/null || true
 nix develop  # optional
-cargo fmt --check 2>/dev/null || true
-cargo test 2>/dev/null || true
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets --all-features
+python3 scripts/verify_repo.py
 ```
 
 ## Status
 
-Foundation scaffold. Domain behavior, persistence migrations, authentication policy, and production secrets must be reviewed before deployment.
+This repository contains source and test coverage for the public auth/UI slice.
+It does not claim that Shared Auth proxy routes, Turnstile keys, delegation
+policies, DNS, Kubernetes, or a provider deployment are configured. Realtime
+routes `/ws` and `/ws/chat` remain closed until the exact browser origin,
+Shared Auth session, and `hhm:chat:connect` delegation are all accepted.
 
 ## Cross-surface delivery
 
