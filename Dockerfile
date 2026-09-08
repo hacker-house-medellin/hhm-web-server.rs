@@ -4,10 +4,23 @@ FROM rust:1.94-bookworm AS build
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /work
+COPY Cargo.toml Cargo.lock ./
+RUN --mount=type=secret,id=hhm_github_token,required=true \
+    set -eu; \
+    hhm_token="$(cat /run/secrets/hhm_github_token)"; \
+    test -n "$hhm_token"; \
+    trap 'rm -f /root/.gitconfig' EXIT; \
+    git config --global url."https://x-access-token:${hhm_token}@github.com/hacker-house-medellin/".insteadOf \
+      "https://github.com/hacker-house-medellin/"; \
+    CARGO_NET_GIT_FETCH_WITH_CLI=true cargo fetch --locked
 COPY . .
-RUN --mount=type=secret,id=github_token \
-    git config --global credential.https://github.com.helper \
-      '!f() { test "$1" = get && echo username=x-access-token && printf "password=" && cat /run/secrets/github_token; }; f' && \
+RUN --mount=type=secret,id=hhm_github_token,required=true \
+    set -eu; \
+    hhm_token="$(cat /run/secrets/hhm_github_token)"; \
+    test -n "$hhm_token"; \
+    trap 'rm -f /root/.gitconfig' EXIT; \
+    git config --global url."https://x-access-token:${hhm_token}@github.com/hacker-house-medellin/".insteadOf \
+      "https://github.com/hacker-house-medellin/"; \
     CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build --locked --release
 
 FROM debian:bookworm-slim
@@ -19,15 +32,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 RUN useradd --create-home --uid 10001 app
 COPY --from=build /work/target/release/hhm-mash-web /usr/local/bin/hhm-mash-web
 USER app
-ENV HOST=0.0.0.0 PORT=8081
+ENV HOST=0.0.0.0 \
+    PORT=8081 \
+    OTEL_SERVICE_NAME=hhm-mash-web \
+    OTEL_EXPORTER_OTLP_ENDPOINT=http://dd-otel-collector.observability.svc.cluster.local:4318 \
+    RUST_LOG=info
 EXPOSE 8081
 
-# --- sops: decrypt at `docker run`, never at `docker build` ------------------
-# The image carries only CIPHERTEXT (env/enc/<SOPS_ENV>.env.enc) and the sops
-# binary. The age key arrives at run time (SOPS_AGE_KEY / SOPS_AGE_KEY_FILE);
-# scripts/sops-entrypoint.sh decrypts into the process environment and execs
-# the real command, so no plaintext ever lands in a layer or on disk.
-# See env/README.md.
+# The image carries only ciphertext. The age key arrives at run time and the
+# entrypoint decrypts directly into the process environment before exec.
 ARG SOPS_ENV=prod
 COPY --chmod=0755 --from=ghcr.io/getsops/sops:v3.10.2-alpine /usr/local/bin/sops /usr/local/bin/sops
 COPY --chmod=0755 scripts/sops-entrypoint.sh /usr/local/bin/sops-entrypoint.sh

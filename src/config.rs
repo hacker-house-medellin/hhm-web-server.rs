@@ -33,47 +33,79 @@ impl Config {
     /// Returns [`ConfigError`] if an identity, network, or database boundary is
     /// absent or unsafe.
     pub fn from_env() -> Result<Self, ConfigError> {
-        let host = optional("HOST").unwrap_or_else(|| "0.0.0.0".into());
-        let port = optional("PORT").unwrap_or_else(|| "8081".into());
+        Self::from_resolver(|name| env::var(name).ok())
+    }
+
+    /// Loads runtime configuration through an audited precedence resolver.
+    ///
+    /// `flags-2-env` supplies typed listener/configuration values while private
+    /// database and authentication material still comes from the decrypted
+    /// runtime environment. Values are never emitted to logs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigError`] if an identity, network, or database boundary is
+    /// absent or unsafe.
+    pub fn from_resolver<F>(resolver: F) -> Result<Self, ConfigError>
+    where
+        F: FnMut(&str) -> Option<String>,
+    {
+        Self::from_lookup(resolver)
+    }
+
+    fn from_lookup<F>(mut lookup: F) -> Result<Self, ConfigError>
+    where
+        F: FnMut(&str) -> Option<String>,
+    {
+        let host = optional(&mut lookup, "HOST").unwrap_or_else(|| "0.0.0.0".into());
+        let port = optional(&mut lookup, "PORT").unwrap_or_else(|| "8081".into());
         let bind_address = format!("{host}:{port}")
             .parse()
             .map_err(|_| ConfigError::Invalid("HOST or PORT"))?;
-        let shared_auth_cookie_name = required("SHARED_AUTH_SESSION_COOKIE_NAME")?;
+        let shared_auth_cookie_name =
+            required(&mut lookup, "SHARED_AUTH_SESSION_COOKIE_NAME")?;
         if !valid_cookie_name(&shared_auth_cookie_name) {
             return Err(ConfigError::Invalid("SHARED_AUTH_SESSION_COOKIE_NAME"));
         }
-        let shared_auth_browser_prefix = required("SHARED_AUTH_BROWSER_PREFIX")?;
+        let shared_auth_browser_prefix = required(&mut lookup, "SHARED_AUTH_BROWSER_PREFIX")?;
         if !valid_local_prefix(&shared_auth_browser_prefix) {
             return Err(ConfigError::Invalid("SHARED_AUTH_BROWSER_PREFIX"));
         }
-        let public_origin = parse_url("PUBLIC_ORIGIN", false)?;
+        let public_origin = parse_url(&mut lookup, "PUBLIC_ORIGIN", false)?;
         if public_origin.as_str() != "https://user.hhaus.org/" {
             return Err(ConfigError::Invalid("PUBLIC_ORIGIN"));
         }
 
         Ok(Self {
             bind_address,
-            read_database_url: SecretString::from(required("READ_DATABASE_URL")?),
-            api_base_url: parse_url("API_BASE_URL", true)?,
-            supabase_url: parse_url("SUPABASE_URL", false)?,
-            shared_auth_base_url: parse_url("SHARED_AUTH_BASE_URL", true)?,
+            read_database_url: SecretString::from(required(&mut lookup, "READ_DATABASE_URL")?),
+            api_base_url: parse_url(&mut lookup, "API_BASE_URL", true)?,
+            supabase_url: parse_url(&mut lookup, "SUPABASE_URL", false)?,
+            shared_auth_base_url: parse_url(&mut lookup, "SHARED_AUTH_BASE_URL", true)?,
             shared_auth_cookie_name,
             shared_auth_browser_prefix,
             delegation_client_id: bounded_identifier(
                 "SHARED_AUTH_DELEGATION_CLIENT_ID",
-                required("SHARED_AUTH_DELEGATION_CLIENT_ID")?,
+                required(&mut lookup, "SHARED_AUTH_DELEGATION_CLIENT_ID")?,
             )?,
             api_audience: bounded_identifier(
                 "SHARED_AUTH_API_AUDIENCE",
-                required("SHARED_AUTH_API_AUDIENCE")?,
+                required(&mut lookup, "SHARED_AUTH_API_AUDIENCE")?,
             )?,
             public_origin,
         })
     }
 }
 
-fn parse_url(name: &'static str, allow_cluster_http: bool) -> Result<Url, ConfigError> {
-    let url = Url::parse(&required(name)?).map_err(|_| ConfigError::Invalid(name))?;
+fn parse_url<F>(
+    lookup: &mut F,
+    name: &'static str,
+    allow_cluster_http: bool,
+) -> Result<Url, ConfigError>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    let url = Url::parse(&required(lookup, name)?).map_err(|_| ConfigError::Invalid(name))?;
     let host = url.host_str().ok_or(ConfigError::Invalid(name))?;
     let normalized_host = host.to_ascii_lowercase();
     let labels = normalized_host.split('.').collect::<Vec<_>>();
@@ -122,13 +154,18 @@ fn valid_local_prefix(value: &str) -> bool {
             .any(|character| matches!(character, '\\' | '\r' | '\n' | '\0' | '?' | '#'))
 }
 
-fn required(name: &'static str) -> Result<String, ConfigError> {
-    optional(name).ok_or(ConfigError::Missing(name))
+fn required<F>(lookup: &mut F, name: &'static str) -> Result<String, ConfigError>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    optional(lookup, name).ok_or(ConfigError::Missing(name))
 }
 
-fn optional(name: &str) -> Option<String> {
-    env::var(name)
-        .ok()
+fn optional<F>(lookup: &mut F, name: &str) -> Option<String>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    lookup(name)
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
 }
@@ -136,6 +173,7 @@ fn optional(name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
 
     #[test]
     fn cookie_and_prefix_boundaries_are_host_only() {
@@ -143,5 +181,48 @@ mod tests {
         assert!(!valid_cookie_name("hhaus-user"));
         assert!(valid_local_prefix("/shared-auth-ui"));
         assert!(!valid_local_prefix("//foreign.example"));
+    }
+
+    #[test]
+    fn audited_resolver_drives_listener_values() {
+        let values = BTreeMap::from([
+            ("HOST".to_owned(), "127.0.0.1".to_owned()),
+            ("PORT".to_owned(), "31338".to_owned()),
+            (
+                "READ_DATABASE_URL".to_owned(),
+                "postgres://readonly".to_owned(),
+            ),
+            ("API_BASE_URL".to_owned(), "https://api.hhaus.org/".to_owned()),
+            (
+                "SUPABASE_URL".to_owned(),
+                "https://example.supabase.co/".to_owned(),
+            ),
+            (
+                "SHARED_AUTH_BASE_URL".to_owned(),
+                "https://auth.hhaus.org/".to_owned(),
+            ),
+            (
+                "SHARED_AUTH_SESSION_COOKIE_NAME".to_owned(),
+                "__Host-hhaus-user".to_owned(),
+            ),
+            (
+                "SHARED_AUTH_BROWSER_PREFIX".to_owned(),
+                "/shared-auth-ui".to_owned(),
+            ),
+            (
+                "SHARED_AUTH_DELEGATION_CLIENT_ID".to_owned(),
+                "hhm-web".to_owned(),
+            ),
+            (
+                "SHARED_AUTH_API_AUDIENCE".to_owned(),
+                "hhm-api".to_owned(),
+            ),
+            (
+                "PUBLIC_ORIGIN".to_owned(),
+                "https://user.hhaus.org/".to_owned(),
+            ),
+        ]);
+        let config = Config::from_resolver(|name| values.get(name).cloned()).expect("config");
+        assert_eq!(config.bind_address.to_string(), "127.0.0.1:31338");
     }
 }
