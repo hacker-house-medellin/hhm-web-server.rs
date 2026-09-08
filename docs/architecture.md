@@ -1,6 +1,27 @@
 # Architecture
 
-Maud, Axum, SeaORM, Supabase, HTMX, and WebSocket Hacker House Medellin web server.
+Maud, Axum, Shared Auth, Turnstile, SeaORM, Supabase, and authenticated
+WebSocket Hacker House Medellín web server.
+
+## Browser/auth boundary
+
+The public browser can render marketing, select an individual or organization
+journey, and submit a bounded anti-abuse proof. It cannot submit passwords,
+product tenant IDs, product roles, provider tokens, or API bearers.
+
+Shared Auth owns the same-origin passwordless ceremony and its configured
+`__Host-` session cookie. The Rust server resolves that cookie through
+`/auth/browser/session`, rejects ambiguous cookies, wrong provider provenance,
+sandboxed/delegated credential classes, and authority outages, then requests
+one exact product delegation through `/auth/delegate`.
+
+HHM remains the authority for organization membership, tenant ownership, and
+product roles. In particular, Shared Auth `provider_tenant` is only the
+credential provider's project/pool namespace.
+
+Browser realtime routes are standardized as `/ws` and `/ws/chat`. Both require
+the exact configured origin, a currently resolved interactive session, and the
+fixed `hhm:chat:connect` delegation before upgrade.
 
 ## Fleet
 
