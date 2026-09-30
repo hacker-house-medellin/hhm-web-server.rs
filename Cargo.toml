@@ -7,7 +7,7 @@ license = "MIT"
 [dependencies]
 anyhow = "1"
 axum = { version = "0.8", features = ["macros", "ws"] }
-base64 = "0.22"
+base64 = "0.23"
 chrono = { version = "0.4", features = ["serde"] }
 flags2env = { version = "0.1.0", git = "https://github.com/flags-2-env/flags-2-env", rev = "d7bad9ea7dfc657653368237e08903514cdca1ec" }
 futures-util = "0.3"
