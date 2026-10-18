@@ -1,5 +1,7 @@
 //! HHaus Medellín public web and secure account-entry server.
 
+pub mod four_transports;
+pub mod web_api_plane;
 pub mod anti_abuse;
 pub mod auth;
 pub mod config;
@@ -171,6 +173,10 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(landing))
+        .route(
+            "/v1/data-plane/capabilities",
+            get(|| async { axum::Json(crate::web_api_plane::capabilities()) }),
+        )
         .route("/join/individual", get(join_individual))
         .route("/join/organization", get(join_organization))
         .route("/auth/start", post(start_auth))
